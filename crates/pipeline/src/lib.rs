@@ -30,6 +30,7 @@ pub mod cull;
 pub mod dust;
 pub mod finish;
 pub mod geometry;
+pub mod lens_blur;
 pub mod local;
 pub mod local_tone;
 pub mod lut;
@@ -423,7 +424,12 @@ pub fn plan<'a>(src: &Rgb32f, info: &SourceInfo, s: &'a DevelopSettings, req: &R
                 fixed_air = Some(local::frame_airlight(src, info, s, &frame, pw, ph));
             }
             // (spots grow the rendered window; only 8-bit renders are cut back to the request)
-            let work = if req.depth == OutputDepth::U8 { spots::window_for_reads(s, &frame, full_w, full_h, px_per_long, win) } else { win };
+            let work = if req.depth == OutputDepth::U8 {
+                let work = spots::window_for_reads(s, &frame, full_w, full_h, px_per_long, win);
+                lens_blur::window_for_reads(s, full_w, full_h, px_per_long, work)
+            } else {
+                win
+            };
             if work != win {
                 keep = Some(PixelWindow { x: win.x - work.x, y: win.y - work.y, ..win });
             }
@@ -449,6 +455,8 @@ pub fn plan<'a>(src: &Rgb32f, info: &SourceInfo, s: &'a DevelopSettings, req: &R
         // and the local tone mapping
         local_tone::enabled(info, s),
         src_long,
+        // and the lens blur (after noise reduction, but a draft must not reuse planes without it)
+        lens_blur::key(s),
     ));
     let lin_key = hash_of((
         pre_nr_key,
@@ -575,6 +583,7 @@ fn render_impl(src: Src<'_>, info: &SourceInfo, s: &DevelopSettings, req: &Rende
             let mut img = if shared.is_some() { (*sampled).clone() } else { Arc::unwrap_or_clone(sampled.clone()) };
             lin_cpu(&mut img, info, &plan);
             local::denoise(&mut img, s, detail_scale);
+            lens_blur::apply(&mut img, s, frame, px_per_long, plan.mattes.as_deref());
             Arc::new(img)
         }
     };

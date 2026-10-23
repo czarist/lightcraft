@@ -407,3 +407,33 @@ fn auto_mask_strokes_match_the_whole_render() {
     };
     check_noisy("auto mask", &s, PixelWindow { x: 400, y: 300, w: 300, h: 250 }, 2, 0.1);
 }
+
+// Given a lens blur, a window (zoomed view) blurs right up to its edges as the whole render does:
+// it is rendered with the blur's reach around it
+#[test]
+fn lens_blur_matches_the_whole_render_up_to_the_window_edges() {
+    use lightcraft_develop::{Mask, MaskComponent, MaskOp, MaskShape};
+    use lightcraft_geom::Point;
+    let radial = MaskShape::Radial { center: Point::new(0.5, 0.5), rx: 0.15, ry: 0.2, angle: 0.0, feather: 30.0, invert: false };
+    let mut s = DevelopSettings {
+        masks: vec![Mask {
+            id: 4,
+            components: vec![MaskComponent { name: None, op: MaskOp::Add, invert: false, shape: radial }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    s.lens_blur.enabled = true;
+    s.lens_blur.amount = 80.0;
+    s.lens_blur.boost = 40.0;
+    s.lens_blur.focus_mask = Some(4);
+    let (f, w) = (full(&s), window(&s, MID));
+    assert_eq!((w.width, w.height), (MID.w, MID.h));
+    let (max, mean) = compare_inset(&f, &w, MID, 0);
+    assert!(max <= 6 && mean <= 0.4, "max {max}, mean {mean:.3}");
+    // and the blur shows: the whole render differs from the one without it
+    let mut off = s.clone();
+    off.lens_blur.enabled = false;
+    let (_, mean) = compare_inset(&full(&off), &f, PixelWindow { x: 0, y: 0, w: f.width, h: f.height }, 0);
+    assert!(mean > 1.0, "{mean:.3}");
+}
