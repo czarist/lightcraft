@@ -365,6 +365,32 @@ fn find_subject_without_the_model_changes_nothing() {
     assert_eq!(*before, *after);
 }
 
+/// Deleting the mask that is the Lens Blur focus clears the focus, so a new mask that gets the same
+/// id doesn't become the focus; undo brings both back.
+#[test]
+fn deleting_the_focus_mask_clears_the_lens_blur_focus() {
+    let mut s = demo();
+    let id = s.active().unwrap();
+    let radial = json!({"kind": "radial", "center": [0.5, 0.5], "rx": 0.2, "ry": 0.2});
+    s.execute("mask.add", &radial).unwrap();
+    let mid = s.develop_of(id).unwrap().masks[0].id;
+    s.execute("develop.merge", &json!({"settings": {"lens_blur": {"enabled": true, "amount": 50, "focus_mask": mid}}})).unwrap();
+    s.execute("mask.delete", &json!({"id": mid})).unwrap();
+    assert_eq!(s.develop_of(id).unwrap().lens_blur.focus_mask, None);
+    // a new mask takes the freed id, and stays an ordinary mask
+    s.execute("mask.add", &radial).unwrap();
+    let d = s.develop_of(id).unwrap();
+    assert_eq!(d.masks[0].id, mid);
+    assert_eq!(d.lens_blur.focus_mask, None);
+    // undoing the add and the delete brings the focus back with its mask
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.develop_of(id).unwrap().lens_blur.focus_mask, Some(mid));
+    // other mask edits keep it
+    s.execute("mask.adjust", &json!({"values": {"exposure": 0.5}})).unwrap();
+    assert_eq!(s.develop_of(id).unwrap().lens_blur.focus_mask, Some(mid));
+}
+
 /// `mask.brushStroke {connect: true}` (a ⇧-click) starts from the last point of the mask's last stroke: one straight
 /// stroke when the brush is unchanged, pieces whose size, feather and flow step from the last stroke's to the new
 /// values when it changed, and a plain dab when there is nothing to connect to.

@@ -144,7 +144,11 @@ fn masks_edit(s: &mut Session, c: &str, label: &str, f: impl FnOnce(&mut Vec<Mas
     let id = s.active().ok_or_else(|| bad(c, "no active photo"))?;
     let mut d = (*s.develop_of(id).unwrap_or_default()).clone();
     let mut active = s.active_mask;
+    // the Lens Blur focus follows its mask: a deleted one stops being the focus, so a new mask
+    // that gets its id (the next id is the highest + 1) doesn't turn into it
+    let focus = d.lens_blur.focus_mask.filter(|f| d.masks.iter().any(|m| m.id == *f));
     f(&mut d.masks, &mut active)?;
+    d.lens_blur.focus_mask = focus.filter(|f| d.masks.iter().any(|m| m.id == *f));
     s.set_develop(id, d, label)?;
     s.active_mask = active;
     Ok(json!({"activeMask": active}))

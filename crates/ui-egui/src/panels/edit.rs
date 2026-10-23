@@ -763,13 +763,15 @@ fn lens_blur_brush(app: &mut LightcraftApp, ui: &mut egui::Ui, b: &lightcraft_de
         });
     });
     // the brush is the Masking brush's (its size also follows [ and ]), with its own Amount
+    // (a reset puts the brush's Amount back to full strength, the others to their minimum)
     for (id, label, min, max, get) in [
         ("ui.lensBlurBrushAmount", "Amount", 1.0, 100.0, app.ui.lens_blur_brush_amount as f64),
         ("ui.brushSize", "Size", 1.0, 100.0, (app.ui.brush_size * 400.0) as f64),
         ("ui.brushFeather", "Feather", 0.0, 100.0, app.ui.brush_feather as f64),
         ("ui.brushFlow", "Flow", 1.0, 100.0, app.ui.brush_flow as f64),
     ] {
-        let s = ControlSpec { id, label, section: Section::LensBlur, min, max, default: min, step: 1.0, decimals: 0, track: Track::Plain };
+        let default = if id == "ui.lensBlurBrushAmount" { 100.0 } else { min };
+        let s = ControlSpec { id, label, section: Section::LensBlur, min, max, default, step: 1.0, decimals: 0, track: Track::Plain };
         let out = slider(ui, &s, get, on, None);
         if let Some(v) = out.value {
             match id {
