@@ -387,6 +387,8 @@ pub struct Plan<'a> {
     pub keep: Option<PixelWindow>,
     /// The source's segmentation mattes ([`SourceInfo::mattes`]).
     pub mattes: Option<Arc<masks::Mattes>>,
+    /// The whole photo's subject estimate a lens blur focuses on ([`lens_blur::subject_estimate`]).
+    pub lens_subject: Option<Arc<lens_blur::SubjectEstimate>>,
 }
 
 /// Long edge of the small render a windowed render estimates the whole frame's airlight from.
@@ -464,7 +466,24 @@ pub fn plan<'a>(src: &Rgb32f, info: &SourceInfo, s: &'a DevelopSettings, req: &R
         [d.nr_luminance, d.nr_detail, d.nr_color, d.nr_color_detail, d.nr_color_smoothness].map(f64::to_bits),
         detail_scale.to_bits(),
     ));
-    Plan { settings, frame, w, h, px_per_long, src_long, detail_scale, geo, lin_key, pre_nr_key, eyes, fixed_air, keep, mattes: info.mattes.clone() }
+    let lens_subject = lens_blur::subject_estimate(src, s, info.mattes.as_deref()).map(Arc::new);
+    Plan {
+        settings,
+        frame,
+        w,
+        h,
+        px_per_long,
+        src_long,
+        detail_scale,
+        geo,
+        lin_key,
+        pre_nr_key,
+        eyes,
+        fixed_air,
+        keep,
+        mattes: info.mattes.clone(),
+        lens_subject,
+    }
 }
 
 /// Whether the scene-linear stage needs work only the CPU does (defringe, spot removal).
@@ -584,7 +603,7 @@ fn render_impl(src: Src<'_>, info: &SourceInfo, s: &DevelopSettings, req: &Rende
             let mut img = if shared.is_some() { (*sampled).clone() } else { Arc::unwrap_or_clone(sampled.clone()) };
             lin_cpu(&mut img, info, &plan);
             local::denoise(&mut img, s, detail_scale);
-            lens_blur::apply(&mut img, s, frame, px_per_long, plan.mattes.as_deref());
+            lens_blur::apply_with(&mut img, s, frame, px_per_long, plan.mattes.as_deref(), plan.lens_subject.as_deref());
             Arc::new(img)
         }
     };

@@ -176,6 +176,13 @@ fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
 
 /// What is in focus, 0..1 per pixel of `img` (scene-linear, before exposure, output resolution).
 pub fn focus(img: &Rgb32f, s: &DevelopSettings, frame: &Frame, mattes: Option<&Mattes>) -> Plane {
+    focus_with(img, s, frame, mattes, None)
+}
+
+/// [`focus`], taking the automatic subject estimate from `subject` (made from the whole photo,
+/// see [`subject_estimate`]) when there is one, so a window of the output gets the same focus as
+/// the whole render.
+fn focus_with(img: &Rgb32f, s: &DevelopSettings, frame: &Frame, mattes: Option<&Mattes>, subject: Option<&SubjectEstimate>) -> Plane {
     let (w, h) = (img.width, img.height);
     let log_l = img.map(crate::local::log_lum);
     let mut a = match (focus_mask(s), s.lens_blur.focus_area(s.crop_center())) {
@@ -186,6 +193,7 @@ pub fn focus(img: &Rgb32f, s: &DevelopSettings, frame: &Frame, mattes: Option<&M
             let shape = MaskShape::Radial { center: area.center, rx: area.rx, ry: area.ry, angle: 0.0, feather: SHAPE_FEATHER, invert: false };
             masks::shape_alpha(&shape, frame, w, h, img, &log_l, 0.0, mattes)
         }
+        (None, None) if let Some(est) = subject => est.sample(frame, w, h),
         (None, None) => {
             let mut a = masks::shape_alpha(&MaskShape::Subject, frame, w, h, img, &log_l, 0.0, mattes);
             // the saliency heuristic gives a flat centre about 0.5: in focus too (person mattes
@@ -212,6 +220,70 @@ pub fn focus(img: &Rgb32f, s: &DevelopSettings, frame: &Frame, mattes: Option<&M
 /// Long edge of the small render [`subject_point`] looks at.
 const SUBJECT_EDGE: usize = 256;
 
+/// Long edge of the small render [`subject_estimate`] makes of the whole photo.
+const ESTIMATE_EDGE: usize = 384;
+
+/// The automatic subject estimate (the saliency heuristic, for a photo without a person matte)
+/// made once from the whole, uncropped photo at [`ESTIMATE_EDGE`]: every render of the photo,
+/// whole or a window of it, samples the same estimate, so a zoomed view keeps the focus the
+/// whole render has (the heuristic reads its neighbourhood, which a window cuts off).
+#[derive(Debug)]
+pub struct SubjectEstimate {
+    plane: Plane,
+    frame: Frame,
+}
+
+impl SubjectEstimate {
+    /// The estimate at each pixel of a `w × h` output of `frame` (bilinear).
+    fn sample(&self, frame: &Frame, w: usize, h: usize) -> Plane {
+        let (pw, ph) = (self.plane.width, self.plane.height);
+        let mut out = Plane::new(w, h);
+        if pw == 0 || ph == 0 || self.plane.data.len() != pw * ph {
+            return out;
+        }
+        let to_norm = frame.out_to_norm(w, h);
+        let to_proxy = self.frame.norm_to_out(pw, ph);
+        let at = |x: usize, y: usize| self.plane.data.get(y.min(ph - 1) * pw + x.min(pw - 1)).copied().unwrap_or(0.0);
+        for (i, v) in out.data.iter_mut().enumerate() {
+            let n = to_norm.apply(lightcraft_geom::Point::new((i % w) as f64 + 0.5, (i / w) as f64 + 0.5));
+            let p = to_proxy.apply(n);
+            let (fx, fy) = ((p.x - 0.5).clamp(0.0, (pw - 1) as f64), (p.y - 0.5).clamp(0.0, (ph - 1) as f64));
+            if !(fx.is_finite() && fy.is_finite()) {
+                continue;
+            }
+            let (x0, y0) = (fx as usize, fy as usize);
+            let (tx, ty) = ((fx - x0 as f64) as f32, (fy - y0 as f64) as f32);
+            let top = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
+            let bot = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+            *v = top + (bot - top) * ty;
+        }
+        out
+    }
+}
+
+/// The [`SubjectEstimate`] the lens blur of `s` focuses on, when it focuses on the automatic
+/// subject estimate (switched on, no focus mask, no fixed shape) of a photo without a person
+/// matte; `None` otherwise (the focus then needs no whole-photo data).
+pub fn subject_estimate(src: &Rgb32f, s: &DevelopSettings, mattes: Option<&Mattes>) -> Option<SubjectEstimate> {
+    if !active(s) || focus_mask(s).is_some() || s.lens_blur.focus_area(s.crop_center()).is_some() || mattes.is_some_and(Mattes::selects_subject) {
+        return None;
+    }
+    if src.width == 0 || src.height == 0 || src.data.len() != src.width.saturating_mul(src.height) {
+        return None;
+    }
+    let frame = Frame::new(src.width, src.height, s, false);
+    let (w, h) = frame.fit(ESTIMATE_EDGE, ESTIMATE_EDGE);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let img = frame.sample(src, w, h);
+    let log_l = img.map(crate::local::log_lum);
+    let mut plane = masks::shape_alpha(&MaskShape::Subject, &frame, w, h, &img, &log_l, 0.0, None);
+    // the saliency heuristic gives a flat centre about 0.5: in focus too
+    plane.data.iter_mut().for_each(|v| *v = smooth(0.25, 0.55, *v));
+    Some(SubjectEstimate { plane, frame })
+}
+
 /// Where the photo's subject most likely is, for a photo whose camera recorded no focus point: the
 /// peak of the subject estimate (person mattes, else the saliency heuristic) over the whole,
 /// uncropped photo, in normalized mask coordinates. `None` for an empty source.
@@ -236,6 +308,18 @@ pub fn subject_point(src: &Rgb32f, s: &DevelopSettings, mattes: Option<&Mattes>)
 /// `frame` and `px_per_long` describe that output), then what each mask with a Lens Blur
 /// adjustment selects (in mask order). Does nothing when no lens blur renders.
 pub fn apply(img: &mut Rgb32f, s: &DevelopSettings, frame: &Frame, px_per_long: f64, mattes: Option<&Mattes>) {
+    apply_with(img, s, frame, px_per_long, mattes, None);
+}
+
+/// [`apply`] with the photo's [`SubjectEstimate`] (renders pass [`crate::Plan::lens_subject`]).
+pub fn apply_with(
+    img: &mut Rgb32f,
+    s: &DevelopSettings,
+    frame: &Frame,
+    px_per_long: f64,
+    mattes: Option<&Mattes>,
+    subject: Option<&SubjectEstimate>,
+) {
     let (w, h) = (img.width, img.height);
     if w == 0 || h == 0 || img.data.len() != w.saturating_mul(h) {
         return;
@@ -245,7 +329,7 @@ pub fn apply(img: &mut Rgb32f, s: &DevelopSettings, frame: &Frame, px_per_long: 
     let origin = frame.view.map_or((0, 0), |v| (at(v.x), at(v.y)));
     let r = radius_px(s, px_per_long);
     if r >= 0.5 {
-        let focus = crate::timed("lens blur focus", || focus(img, s, frame, mattes));
+        let focus = crate::timed("lens blur focus", || focus_with(img, s, frame, mattes, subject));
         if focus.data.len() == img.data.len() {
             // the blur grows with the distance from what is in focus, as with depth
             let ramp = crate::timed("lens blur transition", || transition_ramp(&focus, transition_px(s, px_per_long), px_per_long, origin));
