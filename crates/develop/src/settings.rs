@@ -1213,6 +1213,7 @@ pub enum FocusShape {
 impl FocusShape {
     pub const ALL: [FocusShape; 4] = [FocusShape::Auto, FocusShape::Round, FocusShape::Wide, FocusShape::Tall];
 
+    /// Whether this is the default (Auto: no fixed shape), for skipping it in the JSON.
     fn is_auto(&self) -> bool {
         *self == FocusShape::Auto
     }
@@ -1228,6 +1229,7 @@ impl FocusShape {
         }
     }
 
+    /// The name shown on the shape's button (translated by the UI).
     pub fn label(self) -> &'static str {
         match self {
             FocusShape::Auto => "Auto",
@@ -1242,12 +1244,14 @@ impl LensBlur {
     /// [`LensBlur::transition`]'s default.
     pub const DEFAULT_TRANSITION: f64 = 50.0;
 
+    /// Whether `v` is [`Self::DEFAULT_TRANSITION`], for skipping it in the JSON.
     fn is_default_transition(v: &f64) -> bool {
         *v == Self::DEFAULT_TRANSITION
     }
 }
 
 impl Default for LensBlur {
+    /// Off, with the default Transition and everything else empty.
     fn default() -> Self {
         Self {
             enabled: false,

@@ -167,6 +167,7 @@ pub fn awaiting_ai(m: &Mask) -> bool {
     })
 }
 
+/// Smoothstep: 0 below `e0`, 1 above `e1`, a smooth S-curve between.
 #[inline]
 fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
@@ -298,6 +299,7 @@ struct Ramp {
 }
 
 impl Ramp {
+    /// The share of the full blur pixel `i` (row-major in the window) gets.
     fn at(&self, i: usize) -> f32 {
         let (x, y) = (i % self.w.max(1) + self.shift.0, i / self.w.max(1) + self.shift.1);
         let g = self.g as f32;
@@ -543,6 +545,7 @@ mod tests {
     use lightcraft_develop::{MaskComponent, MaskOp};
     use lightcraft_geom::Point;
 
+    /// Settings with the lens blur switched on at `amount`.
     fn on(amount: f64) -> DevelopSettings {
         let mut s = DevelopSettings::default();
         s.lens_blur.enabled = true;
@@ -574,6 +577,7 @@ mod tests {
         img
     }
 
+    /// Switched off, at Amount 0 or with the section's eye closed, the photo is untouched.
     #[test]
     fn off_amount_zero_or_section_hidden_changes_nothing() {
         let img = scene(64, 48, 50, 10);
@@ -589,6 +593,7 @@ mod tests {
         }
     }
 
+    /// An out-of-focus point of light spreads into a disc of the expected radius and keeps its energy.
     #[test]
     fn out_of_focus_point_becomes_a_disc_and_keeps_its_energy() {
         let (w, h) = (200, 200);
@@ -615,6 +620,7 @@ mod tests {
         assert!((after - before).abs() / before < 0.15, "{before} → {after}");
     }
 
+    /// What is in focus stays sharp, and its brightness doesn't bleed into the blurred background as a halo.
     #[test]
     fn the_focus_stays_sharp_and_does_not_bleed_into_the_background() {
         let (w, h) = (160, 160);
@@ -647,6 +653,7 @@ mod tests {
         assert!((near - 0.2).abs() < 0.04, "{near}");
     }
 
+    /// Boost brightens the blurred highlights only: a mid-grey background stays as it is.
     #[test]
     fn boost_brightens_bokeh_only() {
         let (w, h) = (120, 120);
@@ -664,6 +671,7 @@ mod tests {
         assert!((boosted.get(100, 100)[0] - plain.get(100, 100)[0]).abs() < 1e-4);
     }
 
+    /// A small preview and a full-size export blur alike (the radius is relative to the long edge).
     #[test]
     fn previews_and_exports_blur_alike() {
         // the same photo at two sizes: the blur scales with the long edge
