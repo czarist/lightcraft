@@ -426,8 +426,7 @@ fn remote_job(state: &mut State, shared: &Shared, job: &mut Job, endpoint: &str)
     let operation = match std::mem::replace(&mut job.kind, Kind::Prepare) {
         Kind::Prepare => Operation::Prepare,
         Kind::Text(text) => Operation::Text(text),
-        // (the remote worker's protocol has no subject request: everyone it finds)
-        Kind::Subject { .. } => Operation::Text("person".into()),
+        Kind::Subject { focus } => Operation::Subject(focus.map(|(x, y)| [x, y])),
         Kind::Clicks(clicks) => Operation::Clicks(clicks.iter().map(|c| [c.x, c.y, if c.positive { 1.0 } else { 0.0 }]).collect()),
         Kind::Detail { prompt, region: r } => {
             region = Some(r);
