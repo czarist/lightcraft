@@ -6,7 +6,7 @@ use lightcraft_develop::{DevelopSettings, controls};
 use lightcraft_geom::{Orientation, Rect};
 use lightcraft_raster::{Rgb32f, Rgba8};
 
-use crate::{PixelWindow, RenderRequest, SourceInfo, render};
+use crate::{OutputDepth, PixelWindow, RenderRequest, SourceInfo, render};
 
 const W: usize = 960;
 const H: usize = 640;
@@ -412,6 +412,12 @@ fn auto_mask_strokes_match_the_whole_render() {
 // it is rendered with the blur's reach around it
 #[test]
 fn lens_blur_matches_the_whole_render_up_to_the_window_edges() {
+    lens_blur_window_matches(OutputDepth::U8);
+    lens_blur_window_matches(OutputDepth::U16);
+}
+
+/// A high-bit-depth window grows for the lens blur too, and is cut back to the request.
+fn lens_blur_window_matches(depth: OutputDepth) {
     use lightcraft_develop::{Mask, MaskComponent, MaskOp, MaskShape};
     use lightcraft_geom::Point;
     let radial = MaskShape::Radial { center: Point::new(0.5, 0.5), rx: 0.15, ry: 0.2, angle: 0.0, feather: 30.0, invert: false };
@@ -427,7 +433,14 @@ fn lens_blur_matches_the_whole_render_up_to_the_window_edges() {
     s.lens_blur.amount = 80.0;
     s.lens_blur.boost = 40.0;
     s.lens_blur.focus_mask = Some(4);
-    let (f, w) = (full(&s), window(&s, MID));
+    let deep = |win: Option<PixelWindow>| {
+        let r = render(&scene(), &SourceInfo::default(), &s, &RenderRequest { window: win, depth, ..RenderRequest::fit(W, H) });
+        if let Some(d) = &r.deep {
+            assert_eq!((d.width, d.height), (r.image.width, r.image.height));
+        }
+        r.image
+    };
+    let (f, w) = (deep(None), deep(Some(MID)));
     assert_eq!((w.width, w.height), (MID.w, MID.h));
     let (max, mean) = compare_inset(&f, &w, MID, 0);
     assert!(max <= 6 && mean <= 0.4, "max {max}, mean {mean:.3}");
