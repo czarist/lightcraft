@@ -608,7 +608,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Mask Adjustments",
             [],
             None,
-            "{id?, values: {exposure, contrast, highlights, shadows, whites, blacks, temp, tint, texture, clarity, dehaze, hue, saturation, sharpness, noise, moire, defringe, color_hue, color_sat, amount}}",
+            "{id?, values: {exposure, contrast, highlights, shadows, whites, blacks, temp, tint, texture, clarity, dehaze, hue, saturation, sharpness, noise, moire, defringe, lens_blur, lens_blur_off, lens_blur_outside, lens_blur_boost, lens_blur_transition, color_hue, color_sat, amount}}",
             has_active,
             |s, p| {
                 let vals = p.get("values").cloned().ok_or_else(|| bad("mask.adjust", "missing values"))?;
@@ -1104,6 +1104,9 @@ pub(crate) fn clamp_local(mut a: LocalAdjustments) -> LocalAdjustments {
     ] {
         c(v, -100.0, 100.0);
     }
+    c(&mut a.lens_blur, 0.0, 100.0);
+    c(&mut a.lens_blur_boost, 0.0, 100.0);
+    c(&mut a.lens_blur_transition, 0.0, 100.0);
     c(&mut a.color_hue, 0.0, 360.0);
     c(&mut a.color_sat, 0.0, 100.0);
     c(&mut a.amount, 0.0, 200.0);
@@ -1112,7 +1115,7 @@ pub(crate) fn clamp_local(mut a: LocalAdjustments) -> LocalAdjustments {
 
 /// `mask.brushStroke`'s `pressure`: one number 0..1 per point (clamped), at most one per point; absent or `null`
 /// is no pressure data.
-fn pressure_list(v: Option<&Value>, points: usize) -> Result<Vec<f32>> {
+pub(super) fn pressure_list(v: Option<&Value>, points: usize) -> Result<Vec<f32>> {
     let Some(v) = v.filter(|v| !v.is_null()) else { return Ok(Vec::new()) };
     let list = v.as_array().ok_or_else(|| bad("mask.brushStroke", "pressure must be a list of numbers 0..1"))?;
     if list.len() > points {

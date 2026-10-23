@@ -33,6 +33,7 @@ pub const FIELDS: &[&str] = &[
     "noise",
     "moire",
     "defringe",
+    "lens_blur",
     "color_hue",
     "color_sat",
 ];

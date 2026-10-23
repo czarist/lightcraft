@@ -313,6 +313,58 @@ fn permanently_deleting_explicit_targets_keeps_the_surviving_selection() {
     assert_eq!(s.catalog.to_snapshot(), snapshot);
 }
 
+/// `lensBlur.brushStroke` adds a stroke to the Focus or the Blur brush (clamped, undoable); hostile
+/// input is an error; `lensBlur.brushReset` clears one brush or both.
+#[test]
+fn lens_blur_brush_strokes_and_reset() {
+    let mut s = demo();
+    let id = s.active().unwrap();
+    s.execute(
+        "lensBlur.brushStroke",
+        &json!({"mode": "focus", "points": [[0.2, 0.3], [0.25, 0.3]], "size": 9.0, "amount": 40, "feather": f64::NAN, "autoMask": true}),
+    )
+    .unwrap();
+    s.execute("lensBlur.brushStroke", &json!({"mode": "blur", "points": [[0.7, 0.6]]})).unwrap();
+    let d = s.develop_of(id).unwrap();
+    let (f, b) = (&d.lens_blur.focus_strokes, &d.lens_blur.blur_strokes);
+    assert_eq!((f.len(), b.len()), (1, 1));
+    assert_eq!(f[0].points.len(), 2);
+    assert!(f[0].size == 0.5 && f[0].density == 40.0 && f[0].feather == lightcraft_develop::BrushStroke::default().feather && f[0].auto_mask);
+    for bad in [
+        json!({"mode": "sideways", "points": [[0.5, 0.5]]}),
+        json!({"mode": "focus", "points": []}),
+        json!({"mode": "focus"}),
+        json!({"mode": "blur", "points": [[0.5, 0.5]], "pressure": [0.5, 0.5]}),
+    ] {
+        assert!(s.execute("lensBlur.brushStroke", &bad).is_err(), "{bad}");
+    }
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.develop_of(id).unwrap().lens_blur.blur_strokes.is_empty(), "a stroke is one undo step");
+    s.execute("lensBlur.brushStroke", &json!({"mode": "blur", "points": [[0.7, 0.6]]})).unwrap();
+    s.execute("lensBlur.brushReset", &json!({"mode": "blur"})).unwrap();
+    let d = s.develop_of(id).unwrap();
+    assert!(d.lens_blur.blur_strokes.is_empty() && d.lens_blur.focus_strokes.len() == 1);
+    assert!(s.execute("lensBlur.brushReset", &json!({"mode": "nope"})).is_err());
+    s.execute("lensBlur.brushReset", &json!({})).unwrap();
+    assert!(s.develop_of(id).unwrap().lens_blur.focus_strokes.is_empty());
+}
+
+/// `lensBlur.findSubject` without the SAM 3 model (or in a build without AI masks) is an error that
+/// leaves the photo as it was: no empty mask, the blur not switched on.
+#[test]
+fn find_subject_without_the_model_changes_nothing() {
+    let mut s = demo();
+    let id = s.active().unwrap();
+    // (never the machine's own model: a folder that has none)
+    s.segmenter.dir = Some(std::env::temp_dir().join(format!("lc-no-sam3-{}", std::process::id())));
+    let before = s.develop_of(id).unwrap();
+    let e = s.execute("lensBlur.findSubject", &json!({})).unwrap_err();
+    assert!(e.to_string().contains("SAM 3") || e.to_string().contains("AI masks"), "{e}");
+    let after = s.develop_of(id).unwrap();
+    assert!(after.masks.is_empty() && !after.lens_blur.enabled);
+    assert_eq!(*before, *after);
+}
+
 /// `mask.brushStroke {connect: true}` (a ⇧-click) starts from the last point of the mask's last stroke: one straight
 /// stroke when the brush is unchanged, pieces whose size, feather and flow step from the last stroke's to the new
 /// values when it changed, and a plain dab when there is nothing to connect to.
