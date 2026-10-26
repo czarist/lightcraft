@@ -2370,7 +2370,7 @@ fn lens_blur_shape_overlay(app: &mut LightcraftApp, ui: &mut egui::Ui, resp: &eg
         p.circle_stroke(h, 5.5, Stroke::new(1.5, Color32::from_black_alpha(160)));
     }
     for (name, q) in [("center", c), ("width", hx), ("height", hy)] {
-        register(ui.ctx(), format!("lensBlurArea:{name}"), Rect::from_center_size(q, vec2(14.0, 14.0)));
+        register(ui, format!("lensBlurArea:{name}"), Rect::from_center_size(q, vec2(14.0, 14.0)));
     }
     // which part a point grabs: a handle, else the inside
     let hit = |q: Pos2| -> Option<u8> {

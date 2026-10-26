@@ -549,7 +549,7 @@ fn lens_blur(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings) {
     egui::Frame::NONE.inner_margin(egui::Margin { left: 24, right: 22, top: 4, bottom: 4 }).show(ui, |ui| {
         let mut on = b.enabled;
         let r = ui.checkbox(&mut on, crate::i18n::tr("Apply"));
-        register(ui.ctx(), "check:lensBlur.enabled", r.rect);
+        register(ui, "check:lensBlur.enabled", r.rect);
         if r.on_hover_text(crate::i18n::tr("Blur what is out of focus, as a wide aperture would")).changed() {
             let mut patch = json!({"enabled": on});
             // switched on the first time: a visible starting amount, as in Lightroom
@@ -580,13 +580,13 @@ fn lens_blur(app: &mut LightcraftApp, ui: &mut egui::Ui, d: &DevelopSettings) {
             let mut pick: Option<Option<u32>> = None;
             egui::Popup::menu(&r).show(|ui| {
                 let item = ui.selectable_label(chosen.is_none() && auto, crate::i18n::tr("Subject"));
-                register(ui.ctx(), "lensBlurFocus:subject", item.rect);
+                register(ui, "lensBlurFocus:subject", item.rect);
                 if item.clicked() {
                     pick = Some(None);
                 }
                 for m in &d.masks {
                     let item = ui.selectable_label(chosen.is_some_and(|c| c.id == m.id), m.name.as_str());
-                    register(ui.ctx(), format!("lensBlurFocus:mask:{}", m.id), item.rect);
+                    register(ui, format!("lensBlurFocus:mask:{}", m.id), item.rect);
                     if item.clicked() {
                         pick = Some(Some(m.id));
                     }
@@ -668,7 +668,7 @@ fn focus_shape_row(app: &mut LightcraftApp, ui: &mut egui::Ui, b: &lightcraft_de
             let selected = b.shape == shape;
             let (r, resp) = ui.allocate_exact_size(vec2(36.0, 28.0), Sense::click());
             let name = serde_json::to_value(shape).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
-            register(ui.ctx(), format!("lensBlurShape:{name}"), r);
+            register(ui, format!("lensBlurShape:{name}"), r);
             crate::widgets::announce(&resp, crate::i18n::tr(shape.label()));
             let resp = resp.on_hover_text(crate::i18n::tr(match shape {
                 FocusShape::Auto => "Auto: the photo's subject, estimated",
