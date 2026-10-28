@@ -1,7 +1,12 @@
 //! The Lens Blur section: Apply, the sliders, what stays in focus (the subject, a mask or a fixed
 //! shape that can be moved on the photo), Find Subject and Brush Refinement.
 
-use super::*;
+use super::{
+    Color32, ControlSpec, Icon, LightcraftApp, Pos2, Rect, RichText, Section, Sense, Stroke, Tokens, Track, control, paint, pos2, register, slider,
+    sub_title, text_button, vec2,
+};
+use lightcraft_develop::DevelopSettings;
+use serde_json::json;
 
 /// The Lens Blur section: Apply, Blur Amount, Boost, and what stays in focus (the photo's subject,
 /// or one of its masks, e.g. an Object mask that selected it).

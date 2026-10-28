@@ -3,7 +3,7 @@
 
 use super::geometry::CanvasMap;
 use super::masks::{frame_long_norm, pen_force, pin, record_pressure};
-use super::*;
+use super::{Color32, DevelopSettings, Gesture, LightcraftApp, Point, Pos2, Rect, Stroke, json, register, vec2};
 
 /// Lens Blur's fixed focus shape on the photo (Edit Shape): its outline, a centre pin that moves
 /// it (or drag anywhere inside), and handles on its right and bottom edges that stretch it
